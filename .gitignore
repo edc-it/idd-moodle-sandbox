@@ -58,5 +58,8 @@ moodle-plugin-ci.phar
 .hugo_build.lock
 phpcs.xml
 jsconfig.json
+
+# added by EDC
 db-backups
 plugin-backups
+moodledata
