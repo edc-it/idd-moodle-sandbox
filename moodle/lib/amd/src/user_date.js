@@ -17,7 +17,6 @@
  * Fetch and render dates from timestamps.
  *
  * @module     core/user_date
- * @package    core
  * @copyright  2017 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -107,9 +106,14 @@ define(['jquery', 'core/ajax', 'core/sessionstorage', 'core/config'],
      */
     var loadDatesFromServer = function(dates) {
         var args = dates.map(function(data) {
+            var fixDay = data.hasOwnProperty('fixday') ? data.fixday : 1;
+            var fixHour = data.hasOwnProperty('fixhour') ? data.fixhour : 1;
             return {
                 timestamp: data.timestamp,
-                format: data.format
+                format: data.format,
+                type: data.type || null,
+                fixday: fixDay,
+                fixhour: fixHour
             };
         });
 
@@ -155,7 +159,8 @@ define(['jquery', 'core/ajax', 'core/sessionstorage', 'core/config'],
      * Only dates not found in either cache will be sent to the server
      * for transforming.
      *
-     * A request object must have a timestamp key and a format key.
+     * A request object must have a timestamp key and a format key and
+     * optionally may have a type key.
      *
      * E.g.
      * var request = [
@@ -165,7 +170,10 @@ define(['jquery', 'core/ajax', 'core/sessionstorage', 'core/config'],
      *     },
      *     {
      *         timestamp: 1293876000,
-     *         format: '%A, %d %B %Y, %I:%M %p'
+     *         format: '%A, %d %B %Y, %I:%M %p',
+     *         type: 'gregorian',
+     *         fixday: false,
+     *         fixhour: false
      *     }
      * ];
      *

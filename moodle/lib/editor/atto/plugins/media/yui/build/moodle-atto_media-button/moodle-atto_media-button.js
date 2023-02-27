@@ -434,6 +434,12 @@ Y.namespace('M.atto_media').Button = Y.Base.create('button', Y.M.editor_atto.Edi
             this.editor.delegate('dblclick', this._displayDialogue, 'video', this);
             this.editor.delegate('click', this._handleClick, 'video', this);
 
+            // For some reason, clicking the video on Firefox does not trigger the click event, while in Chrome it does.
+            // We also need to handle the play/pause instead.
+            this._attachPlayPauseEvents();
+            var changeHandler = this._attachPlayPauseEvents.bind(this);
+            this.get('host').on('change', changeHandler, null);
+
             this.addButton({
                 icon: 'e/insert_edit_video',
                 callback: this._displayDialogue,
@@ -441,6 +447,26 @@ Y.namespace('M.atto_media').Button = Y.Base.create('button', Y.M.editor_atto.Edi
                 tagMatchRequiresAll: false
             });
         }
+    },
+
+    /**
+     * Attaches Play/Pause events to the video nodes.
+     *
+     * @private
+     */
+    _attachPlayPauseEvents: function() {
+        if (this._handlePlayEndBound === undefined) {
+            this._handlePlayEndBound = this._handlePlayEnd.bind(this);
+        }
+        var videos = this.editor.getDOMNode().querySelectorAll('video');
+        videos.forEach(function(video) {
+            // Prevent duplicated event listeners.
+            video.removeEventListener('play', this._handlePlayEndBound);
+            video.removeEventListener('pause', this._handlePlayEndBound);
+            // Add event listeners.
+            video.addEventListener('play', this._handlePlayEndBound);
+            video.addEventListener('pause', this._handlePlayEndBound);
+        }.bind(this));
     },
 
     /**
@@ -475,6 +501,23 @@ Y.namespace('M.atto_media').Button = Y.Base.create('button', Y.M.editor_atto.Edi
         var selection = this.get('host').getSelectionFromNode(medium);
         if (this.get('host').getSelection() !== selection) {
             this.get('host').setSelection(selection);
+        }
+    },
+
+    /**
+     * Handles a play/end on a media element.
+     *
+     * @method _handlePlayEnd
+     * @param {Event} e
+     * @private
+     */
+    _handlePlayEnd: function(e) {
+        var medium = Y.one(e.target);
+
+        var selection = this.get('host').getSelectionFromNode(medium);
+        if (this.get('host').getSelection() !== selection) {
+            this.get('host').setSelection(selection);
+            this.get('host')._hasSelectionChanged(e);
         }
     },
 
@@ -714,7 +757,9 @@ Y.namespace('M.atto_media').Button = Y.Base.create('button', Y.M.editor_atto.Edi
      */
     _getMediumProperties: function(medium) {
         var boolAttr = function(elem, attr) {
-            return elem.getAttribute(attr) ? true : false;
+            // As explained in MDL-64175, some OS (like Ubuntu), are removing the value for these attributes.
+            // So in order to check if attr="true", we need to check if the attribute exists and if the value is empty or true.
+            return (elem.hasAttribute(attr) && (elem.getAttribute(attr) || elem.getAttribute(attr) === ''));
         };
 
         var tracks = {

@@ -91,7 +91,7 @@ if ($stage & restore_ui::STAGE_CONFIRM + restore_ui::STAGE_DESTINATION) {
         $restore = restore_ui::engage_independent_stage($stage/2, $contextid);
         if ($restore->process()) {
             $rc = new restore_controller($restore->get_filepath(), $restore->get_course_id(), backup::INTERACTIVE_YES,
-                    $backupmode, $USER->id, $restore->get_target());
+                    $backupmode, $USER->id, $restore->get_target(), null, backup::RELEASESESSION_YES);
         }
     }
     if ($rc) {
@@ -171,6 +171,7 @@ if ($restore->get_stage() != restore_ui::STAGE_PROCESS) {
     $restoreid = $restore->get_restoreid();
     $asynctask = new \core\task\asynchronous_restore_task();
     $asynctask->set_blocking(false);
+    $asynctask->set_userid($USER->id);
     $asynctask->set_custom_data(array('backupid' => $restoreid));
     \core\task\manager::queue_adhoc_task($asynctask);
 

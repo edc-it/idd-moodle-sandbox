@@ -26,11 +26,11 @@ Feature: Access to full profiles of users
 
   Scenario: Viewing full profiles with default settings
     When I log in as "student1"
+    # Another student's full profile is visible
     And I am on "Course 1" course homepage
-    # Another student's full profile is not visible
     And I navigate to course participants
     And I follow "Student 2"
-    Then I should not see "Full profile"
+    Then I should see "Full profile"
     # Teacher's full profile is visible
     And I am on "Course 1" course homepage
     And I navigate to course participants
@@ -63,6 +63,14 @@ Feature: Access to full profiles of users
     And I am on "Course 1" course homepage
     And I navigate to course participants
     And I follow "Student 2"
+    And I follow "Full profile"
+    Then I should see "First access to site"
+
+  Scenario: Viewing full profiles of students as a teacher
+    When I log in as "teacher1"
+    And I am on "Course 1" course homepage
+    And I navigate to course participants
+    And I follow "Student 1"
     And I follow "Full profile"
     Then I should see "First access to site"
 
@@ -121,3 +129,19 @@ Feature: Access to full profiles of users
     And I log in as "student1"
     And I view the "Student 2" contact in the message area
     Then I should see "First access to site"
+
+  @javascript
+  Scenario: Accessibility, users can not click on profile image when on user's profile page.
+    Given I log in as "admin"
+    And I am on "Course 1" course homepage
+    When I navigate to course participants
+    Then "//img[contains(@class, 'userpicture')]" "xpath_element" should exist
+    And "//a/child::img[contains(@class, 'userpicture')]" "xpath_element" should exist
+    When I follow "Teacher 1"
+    Then I should see "Teacher 1"
+    And "//img[contains(@class, 'userpicture')]" "xpath_element" should exist
+    And "//a/child::img[contains(@class, 'userpicture')]" "xpath_element" should not exist
+    When I follow "Full profile"
+    And I should see "Teacher 1"
+    Then "//img[contains(@class, 'userpicture')]" "xpath_element" should exist
+    And "//a/child::img[contains(@class, 'userpicture')]" "xpath_element" should not exist

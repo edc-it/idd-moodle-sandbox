@@ -664,6 +664,13 @@ function filter_set_global_state($filtername, $state, $move = 0) {
 
     // Move only active.
     if ($move != 0 and isset($on[$filter->filter])) {
+        // Capture the old order for logging.
+        $oldorder = implode(', ', array_map(
+                function($f) {
+                    return $f->filter;
+                }, $on));
+
+        // Work out the new order.
         $i = 1;
         foreach ($on as $f) {
             $f->newsortorder = $i;
@@ -686,6 +693,13 @@ function filter_set_global_state($filtername, $state, $move = 0) {
         }
 
         core_collator::asort_objects_by_property($on, 'newsortorder', core_collator::SORT_NUMERIC);
+
+        // Log in config_log.
+        $neworder = implode(', ', array_map(
+                function($f) {
+                    return $f->filter;
+                }, $on));
+        add_to_config_log('order', $oldorder, $neworder, 'core_filter');
     }
 
     // Inactive are sorted by filter name.
@@ -707,6 +721,35 @@ function filter_set_global_state($filtername, $state, $move = 0) {
     }
 
     $transaction->allow_commit();
+}
+
+/**
+ * Returns the active state for a filter in the given context.
+ *
+ * @param string $filtername The filter name, for example 'tex'.
+ * @param integer $contextid The id of the context to get the data for.
+ * @return int value of active field for the given filter.
+ */
+function filter_get_active_state(string $filtername, $contextid = null): int {
+    global $DB;
+
+    if ($contextid === null) {
+        $contextid = context_system::instance()->id;
+    }
+    if (is_object($contextid)) {
+        $contextid = $contextid->id;
+    }
+
+    if (strpos($filtername, 'filter/') === 0) {
+        $filtername = substr($filtername, 7);
+    } else if (strpos($filtername, '/') !== false) {
+        throw new coding_exception("Invalid filter name '$filtername' used in filter_is_enabled()");
+    }
+    if ($active = $DB->get_field('filter_active', 'active', array('filter' => $filtername, 'contextid' => $contextid))) {
+        return $active;
+    }
+
+    return TEXTFILTER_DISABLED;
 }
 
 /**

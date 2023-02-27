@@ -122,7 +122,7 @@ if (!async_helper::is_async_pending($id, 'course', 'backup')) {
 
     if (!($bc = backup_ui::load_controller($backupid))) {
         $bc = new backup_controller($type, $id, backup::FORMAT_MOODLE,
-                backup::INTERACTIVE_YES, $backupmode, $USER->id);
+                backup::INTERACTIVE_YES, $backupmode, $USER->id, backup::RELEASESESSION_YES);
         // The backup id did not relate to a valid controller so we made a new controller.
         // Now we need to reset the backup id to match the new controller.
         $backupid = $bc->get_backupid();
@@ -202,6 +202,7 @@ if (!async_helper::is_async_pending($id, 'course', 'backup')) {
             $asynctask = new \core\task\asynchronous_backup_task();
             $asynctask->set_blocking(false);
             $asynctask->set_custom_data(array('backupid' => $backupid));
+            $asynctask->set_userid($USER->id);
             \core\task\manager::queue_adhoc_task($asynctask);
 
             // Add ajax progress bar and initiate ajax via a template.

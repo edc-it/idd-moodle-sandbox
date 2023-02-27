@@ -63,67 +63,6 @@ function xmldb_lti_upgrade($oldversion) {
 
     $dbman = $DB->get_manager();
 
-    // Automatically generated Moodle v3.3.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    // Automatically generated Moodle v3.4.0 release upgrade line.
-    // Put any upgrade step following this.
-
-    if ($oldversion < 2017111301) {
-
-        // A bug in the LTI plugin incorrectly inserted a grade item for
-        // LTI instances which were set to not allow grading.
-        // The change finds any LTI which does not have grading enabled,
-        // and updates any grades to delete them.
-
-        $ltis = $DB->get_recordset_sql("
-                SELECT
-                       l.id,
-                       l.course,
-                       l.instructorchoiceacceptgrades,
-                       t.enabledcapability,
-                       t.toolproxyid,
-                       tc.value AS acceptgrades
-                  FROM {lti} l
-            INNER JOIN {grade_items} gt
-                    ON l.id = gt.iteminstance
-             LEFT JOIN {lti_types} t
-                    ON t.id = l.typeid
-             LEFT JOIN {lti_types_config} tc
-                    ON tc.typeid = t.id AND tc.name = 'acceptgrades'
-                 WHERE gt.itemmodule = 'lti'
-                   AND gt.itemtype = 'mod'
-        ");
-
-        foreach ($ltis as $lti) {
-            $acceptgrades = true;
-            if (empty($lti->toolproxyid)) {
-                $typeacceptgrades = isset($lti->acceptgrades) ? $lti->acceptgrades : 2;
-                if (!($typeacceptgrades == 1 ||
-                        ($typeacceptgrades == 2 && $lti->instructorchoiceacceptgrades == 1))) {
-                    $acceptgrades = false;
-                }
-            } else {
-                $enabledcapabilities = explode("\n", $lti->enabledcapability);
-                $acceptgrades = in_array('Result.autocreate', $enabledcapabilities);
-            }
-
-            if (!$acceptgrades) {
-                // Required when doing CLI upgrade.
-                require_once($CFG->libdir . '/gradelib.php');
-                grade_update('mod/lti', $lti->course, 'mod', 'lti', $lti->id, 0, null, array('deleted' => 1));
-            }
-
-        }
-
-        $ltis->close();
-
-        upgrade_mod_savepoint(true, 2017111301, 'lti');
-    }
-
-    // Automatically generated Moodle v3.5.0 release upgrade line.
-    // Put any upgrade step following this.
-
     // Automatically generated Moodle v3.6.0 release upgrade line.
     // Put any upgrade step following this.
 
@@ -223,6 +162,54 @@ function xmldb_lti_upgrade($oldversion) {
 
     // Automatically generated Moodle v3.8.0 release upgrade line.
     // Put any upgrade step following this.
+
+    // Automatically generated Moodle v3.9.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2020061501) {
+
+        // Changing type of field instructorcustomparameters on table lti to text.
+        $table = new xmldb_table('lti');
+        $field = new xmldb_field('instructorcustomparameters', XMLDB_TYPE_TEXT, null, null, null, null, null,
+                'instructorchoiceallowsetting');
+
+        // Launch change of type for field value.
+        $dbman->change_field_type($table, $field);
+
+        // Lti savepoint reached.
+        upgrade_mod_savepoint(true, 2020061501, 'lti');
+    }
+
+    // Automatically generated Moodle v3.10.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    // Automatically generated Moodle v3.11.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2021051701) {
+        // This option 'Public key type' was added in MDL-66920, but no value was set for existing 1.3 tools.
+        // Set a default of 'RSA Key' for those LTI 1.3 tools without a value, representing the only key type they
+        // could use at the time of their creation. Existing tools which have since been resaved will not be impacted.
+        $sql = "SELECT t.id
+                  FROM {lti_types} t
+             LEFT JOIN {lti_types_config} tc
+                    ON (tc.typeid = t.id AND tc.name = :typename)
+                 WHERE t.ltiversion = :ltiversion
+                   AND tc.value IS NULL";
+        $params = ['typename' => 'keytype', 'ltiversion' => '1.3.0'];
+        $recordset = $DB->get_recordset_sql($sql, $params);
+        foreach ($recordset as $record) {
+            $DB->insert_record('lti_types_config', (object) [
+                'typeid' => $record->id,
+                'name' => 'keytype',
+                'value' => 'RSA_KEY'
+            ]);
+        }
+        $recordset->close();
+
+        // Lti savepoint reached.
+        upgrade_mod_savepoint(true, 2021051701, 'lti');
+    }
 
     return true;
 }

@@ -16,7 +16,9 @@ $iconsizes: map-merge((
   2: ($icon-width * .5),
   3: $icon-width,
   4: ($icon-width * 1.5),
-  5: ($icon-width * 3)
+  5: ($icon-width * 2),
+  6: ($icon-width * 2.5),
+  7: ($icon-width * 3)
 ), $iconsizes);
 // stylelint-enable
 
@@ -24,7 +26,6 @@ $iconsizes: map-merge((
     font-size: $icon-height;
     width: $icon-width;
     height: $icon-height;
-    // vertical-align: middle;
     margin: 0;
     padding: 0;
     box-sizing: content-box;
@@ -38,10 +39,6 @@ $iconsizes: map-merge((
         width: $icon-big-width;
         height: $icon-big-height;
         font-size: $icon-big-height;
-    }
-
-    &.movetarget {
-        width: 80px;
     }
 }
 

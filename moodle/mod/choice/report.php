@@ -95,13 +95,16 @@
 
     $users = choice_get_response_data($choice, $cm, $groupmode, $onlyactive);
 
-    $extrafields = get_extra_user_fields($context);
+    // TODO Does not support custom user profile fields (MDL-70456).
+    $extrafields = \core_user\fields::get_identity_fields($context, false);
 
     if ($download == "ods" && has_capability('mod/choice:downloadresponses', $context)) {
         require_once("$CFG->libdir/odslib.class.php");
 
     /// Calculate file name
-        $filename = clean_filename("$course->shortname ".strip_tags(format_string($choice->name,true))).'.ods';
+        $shortname = format_string($course->shortname, true, array('context' => $context));
+        $choicename = format_string($choice->name, true, array('context' => $context));
+        $filename = clean_filename("$shortname " . strip_tags($choicename)) . '.ods';
     /// Creating a workbook
         $workbook = new MoodleODSWorkbook("-");
     /// Send HTTP headers
@@ -116,7 +119,7 @@
 
         // Add headers for extra user fields.
         foreach ($extrafields as $field) {
-            $myxls->write_string(0, $i++, get_user_field_name($field));
+            $myxls->write_string(0, $i++, \core_user\fields::get_display_name($field));
         }
 
         $myxls->write_string(0, $i++, get_string("group"));
@@ -160,7 +163,9 @@
         require_once("$CFG->libdir/excellib.class.php");
 
     /// Calculate file name
-        $filename = clean_filename("$course->shortname ".strip_tags(format_string($choice->name,true))).'.xls';
+        $shortname = format_string($course->shortname, true, array('context' => $context));
+        $choicename = format_string($choice->name, true, array('context' => $context));
+        $filename = clean_filename("$shortname " . strip_tags($choicename)) . '.xls';
     /// Creating a workbook
         $workbook = new MoodleExcelWorkbook("-");
     /// Send HTTP headers
@@ -175,7 +180,7 @@
 
         // Add headers for extra user fields.
         foreach ($extrafields as $field) {
-            $myxls->write_string(0, $i++, get_user_field_name($field));
+            $myxls->write_string(0, $i++, \core_user\fields::get_display_name($field));
         }
 
         $myxls->write_string(0, $i++, get_string("group"));
@@ -215,7 +220,9 @@
 
     // print text file
     if ($download == "txt" && has_capability('mod/choice:downloadresponses', $context)) {
-        $filename = clean_filename("$course->shortname ".strip_tags(format_string($choice->name,true))).'.txt';
+        $shortname = format_string($course->shortname, true, array('context' => $context));
+        $choicename = format_string($choice->name, true, array('context' => $context));
+        $filename = clean_filename("$shortname " . strip_tags($choicename)) . '.txt';
 
         header("Content-Type: application/download\n");
         header("Content-Disposition: attachment; filename=\"$filename\"");
@@ -229,7 +236,7 @@
 
         // Add headers for extra user fields.
         foreach ($extrafields as $field) {
-            echo get_user_field_name($field) . "\t";
+            echo \core_user\fields::get_display_name($field) . "\t";
         }
 
         echo get_string("group"). "\t";

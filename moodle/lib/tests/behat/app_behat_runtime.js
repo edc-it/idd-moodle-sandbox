@@ -410,7 +410,8 @@
             case 'page menu' :
                 // This lang string was changed in app version 3.6.
                 selector = 'core-context-menu > button[aria-label=Info], ' +
-                        'core-context-menu > button[aria-label=Information]';
+                        'core-context-menu > button[aria-label=Information], ' +
+                        'core-context-menu > button[aria-label="Display options"]';
                 break;
             default:
                 return 'ERROR: Unsupported standard button type';
@@ -476,6 +477,23 @@
     };
 
     /**
+     * Get main navigation controller.
+     *
+     * @return {Object} main navigation controller.
+     */
+    var getNavCtrl = function() {
+        var mainNav = window.appProvider.appCtrl.getRootNavs()[0].getActiveChildNav();
+        if (mainNav && mainNav.tabsIds.length && mainNav.firstSelectedTab) {
+            var tabPos = mainNav.tabsIds.indexOf(mainNav.firstSelectedTab);
+            if (tabPos !== -1 && mainNav._tabs && mainNav._tabs.length > tabPos) {
+                return mainNav._tabs[tabPos];
+            }
+        }
+        // Fallback to return main nav - this will work but will overlay current tab.
+        return window.appProvider.appCtrl.getRootNavs()[0];
+    };
+
+    /**
      * Function to press arbitrary item based on its text or Aria label.
      *
      * @param {string} text Text (full or partial)
@@ -492,9 +510,13 @@
             return 'ERROR: ' + error.message;
         }
 
-        // Simulate a mouse click on the button.
-        found.scrollIntoView();
+        var mainContent = getNavCtrl().getActive().contentRef().nativeElement;
         var rect = found.getBoundingClientRect();
+
+        // Scroll the item into view.
+        mainContent.scrollTo(rect.x, rect.y);
+
+        // Simulate a mouse click on the button.
         var eventOptions = {clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2,
                 bubbles: true, view: window, cancelable: true};
         setTimeout(function() {

@@ -34,7 +34,7 @@ require_once($CFG->dirroot.'/course/lib.php');
 
 $id         = required_param('id', PARAM_INT);
 $switchrole = optional_param('switchrole', -1, PARAM_INT);
-$returnurl  = optional_param('returnurl', '', PARAM_RAW);
+$returnurl  = optional_param('returnurl', '', PARAM_LOCALURL);
 
 if (strpos($returnurl, '?') === false) {
     // Looks like somebody did not set proper page url, better go to course page.
@@ -43,7 +43,7 @@ if (strpos($returnurl, '?') === false) {
     if (strpos($returnurl, $CFG->wwwroot) !== 0) {
         $returnurl = $CFG->wwwroot.$returnurl;
     }
-    $returnurl  = clean_param($returnurl, PARAM_URL);
+    $returnurl  = clean_param($returnurl, PARAM_LOCALURL);
 }
 
 $PAGE->set_url('/course/switchrole.php', array('id'=>$id, 'switchrole'=>$switchrole));
@@ -88,7 +88,7 @@ if ($switchrole > 0 && has_capability('moodle/role:switchroles', $context)) {
         $roles[0] = get_string('switchrolereturn');
         $assumedrole = $USER->access['rsw'][$context->path];
     }
-    $availableroles = get_switchable_roles($context);
+    $availableroles = get_switchable_roles($context, ROLENAME_BOTH);
     if (is_array($availableroles)) {
         foreach ($availableroles as $key => $role) {
             if ($assumedrole == (int)$key) {

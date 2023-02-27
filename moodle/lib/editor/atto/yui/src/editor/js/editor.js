@@ -149,6 +149,22 @@ Y.extend(Editor, Y.Base, {
     plugins: null,
 
     /**
+     * An indicator of the current input direction.
+     *
+     * @property coreDirection
+     * @type string
+     */
+    coreDirection: null,
+
+    /**
+     * Enable/disable the empty placeholder content.
+     *
+     * @property enableAppropriateEmptyContent
+     * @type Boolean
+     */
+    enableAppropriateEmptyContent: null,
+
+    /**
      * Event Handles to clear on editor destruction.
      *
      * @property _eventHandles
@@ -193,6 +209,12 @@ Y.extend(Editor, Y.Base, {
             this.textareaLabel.generateID();
             this.editor.setAttribute('aria-labelledby', this.textareaLabel.get("id"));
         }
+
+        // Set diretcion according to current page language.
+        this.coreDirection = Y.one('body').hasClass('dir-rtl') ? 'rtl' : 'ltr';
+
+        // Enable the placeholder for empty content.
+        this.enablePlaceholderForEmptyContent();
 
         // Add everything to the wrapper.
         this.setupToolbar();
@@ -405,6 +427,20 @@ Y.extend(Editor, Y.Base, {
         if (editorfield) {
             editorfield.setAttribute('contenteditable', !disabled);
         }
+    },
+
+    /**
+     * Enable the empty placeholder for empty content.
+     */
+    enablePlaceholderForEmptyContent: function() {
+        this.enableAppropriateEmptyContent = true;
+    },
+
+    /**
+     * Disable the empty placeholder for empty content.
+     */
+    disablePlaceholderForEmptyContent: function() {
+        this.enableAppropriateEmptyContent = false;
     },
 
     /**

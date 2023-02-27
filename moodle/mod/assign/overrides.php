@@ -121,8 +121,9 @@ if ($groupmode) {
     list($sort, $params) = users_order_by_sql('u');
     $params['assignid'] = $assign->id;
 
+    $userfieldsapi = \core_user\fields::for_name();
     if ($accessallgroups) {
-        $sql = 'SELECT o.*, ' . get_all_user_name_fields(true, 'u') . '
+        $sql = 'SELECT o.*, ' . $userfieldsapi->get_sql('u', false, '', '', false)->selects . '
                   FROM {assign_overrides} o
                   JOIN {user} u ON o.userid = u.id
                  WHERE o.assignid = :assignid
@@ -133,7 +134,7 @@ if ($groupmode) {
         list($insql, $inparams) = $DB->get_in_or_equal(array_keys($groups), SQL_PARAMS_NAMED);
         $params += $inparams;
 
-        $sql = 'SELECT o.*, ' . get_all_user_name_fields(true, 'u') . '
+        $sql = 'SELECT o.*, ' . $userfieldsapi->get_sql('u', false, '', '', false)->selects . '
                   FROM {assign_overrides} o
                   JOIN {user} u ON o.userid = u.id
                   JOIN {groups_members} gm ON u.id = gm.userid
@@ -201,17 +202,15 @@ foreach ($overrides as $override) {
     // Icons.
     $iconstr = '';
 
-    if ($active) {
-        // Edit.
-        $editurlstr = $overrideediturl->out(true, array('id' => $override->id));
-        $iconstr = '<a title="' . get_string('edit') . '" href="'. $editurlstr . '">' .
-                $OUTPUT->pix_icon('t/edit', get_string('edit')) . '</a> ';
-        // Duplicate.
-        $copyurlstr = $overrideediturl->out(true,
-                array('id' => $override->id, 'action' => 'duplicate'));
-        $iconstr .= '<a title="' . get_string('copy') . '" href="' . $copyurlstr . '">' .
-                $OUTPUT->pix_icon('t/copy', get_string('copy')) . '</a> ';
-    }
+    // Edit.
+    $editurlstr = $overrideediturl->out(true, array('id' => $override->id));
+    $iconstr = '<a title="' . get_string('edit') . '" href="'. $editurlstr . '">' .
+            $OUTPUT->pix_icon('t/edit', get_string('edit')) . '</a> ';
+    // Duplicate.
+    $copyurlstr = $overrideediturl->out(true,
+            array('id' => $override->id, 'action' => 'duplicate'));
+    $iconstr .= '<a title="' . get_string('copy') . '" href="' . $copyurlstr . '">' .
+            $OUTPUT->pix_icon('t/copy', get_string('copy')) . '</a> ';
     // Delete.
     $deleteurlstr = $overridedeleteurl->out(true,
             array('id' => $override->id, 'sesskey' => sesskey()));

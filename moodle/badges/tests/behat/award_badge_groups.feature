@@ -30,9 +30,7 @@ Feature: Award badges with separate groups
       | teacher1 | CB |
       | student2 | CA |
       | teacher2 | CA |
-    And I log in as "teacher1"
-    And I am on "Course 1" course homepage
-    And I navigate to "Edit settings" in current page administration
+    And I am on the "Course 1" "course editing" page logged in as "teacher1"
     And I expand all fieldsets
     And I set the field "Group mode" to "Separate groups"
     And I press "Save and display"
@@ -41,7 +39,6 @@ Feature: Award badges with separate groups
     And I set the following fields to these values:
       | Name | Course Badge |
       | Description | Course badge description |
-      | issuername | Tester of course badge |
     And I upload "badges/tests/behat/badge.png" file to "Image" filemanager
     And I press "Create badge"
     And I set the field "type" to "Manual issue by role"

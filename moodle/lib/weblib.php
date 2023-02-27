@@ -2215,6 +2215,16 @@ function highlightfast($needle, $haystack) {
  * @return string Attributes
  */
 function get_html_lang($dir = false) {
+    global $CFG;
+
+    $currentlang = current_language();
+    if ($currentlang !== $CFG->lang && !get_string_manager()->translation_exists($currentlang)) {
+        // Use the default site language when the current language is not available.
+        $currentlang = $CFG->lang;
+        // Fix the current language.
+        fix_current_language($currentlang);
+    }
+
     $direction = '';
     if ($dir) {
         if (right_to_left()) {
@@ -2223,8 +2233,9 @@ function get_html_lang($dir = false) {
             $direction = ' dir="ltr"';
         }
     }
+
     // Accessibility: added the 'lang' attribute to $direction, used in theme <html> tag.
-    $language = str_replace('_', '-', current_language());
+    $language = str_replace('_', '-', $currentlang);
     @header('Content-Language: '.$language);
     return ($direction.' lang="'.$language.'" xml:lang="'.$language.'"');
 }
@@ -2284,6 +2295,11 @@ function send_headers($contenttype, $cacheable = true) {
     // The Moodle app must be allowed to embed content always.
     if (empty($CFG->allowframembedding) && !core_useragent::is_moodle_app()) {
         @header('X-Frame-Options: sameorigin');
+    }
+
+    // If referrer policy is set, add a referrer header.
+    if (!empty($CFG->referrerpolicy) && ($CFG->referrerpolicy !== 'default')) {
+        @header('Referrer-Policy: ' . $CFG->referrerpolicy);
     }
 }
 
@@ -2436,9 +2452,11 @@ function print_collapsible_region($contents, $classes, $id, $caption, $userpref 
  *      (May be blank if you do not wish the state to be persisted.
  * @param boolean $default Initial collapsed state to use if the user_preference it not set.
  * @param boolean $return if true, return the HTML as a string, rather than printing it.
+ * @param string $extracontent the extra content will show next to caption, eg.Help icon.
  * @return string|void if $return is false, returns nothing, otherwise returns a string of HTML.
  */
-function print_collapsible_region_start($classes, $id, $caption, $userpref = '', $default = false, $return = false) {
+function print_collapsible_region_start($classes, $id, $caption, $userpref = '', $default = false, $return = false,
+        $extracontent = null) {
     global $PAGE;
 
     // Work out the initial state.
@@ -2458,8 +2476,11 @@ function print_collapsible_region_start($classes, $id, $caption, $userpref = '',
     $output .= '<div id="' . $id . '" class="collapsibleregion ' . $classes . '">';
     $output .= '<div id="' . $id . '_sizer">';
     $output .= '<div id="' . $id . '_caption" class="collapsibleregioncaption">';
-    $output .= $caption . ' ';
-    $output .= '</div><div id="' . $id . '_inner" class="collapsibleregioninner">';
+    $output .= $caption . ' </div>';
+    if ($extracontent) {
+        $output .= html_writer::div($extracontent, 'collapsibleregionextracontent');
+    }
+    $output .= '<div id="' . $id . '_inner" class="collapsibleregioninner">';
     $PAGE->requires->js_init_call('M.util.init_collapsible_region', array($id, $userpref, get_string('clicktohideshow')));
 
     if ($return) {
@@ -2563,11 +2584,6 @@ function get_group_picture_url($group, $courseid, $large = false, $includetoken 
 
     // If there is no picture, do nothing.
     if (!$group->picture) {
-        return;
-    }
-
-    // If picture is hidden, only show to those with course:managegroups.
-    if ($group->hidepicture and !has_capability('moodle/course:managegroups', $context)) {
         return;
     }
 
@@ -2949,6 +2965,17 @@ function redirect($url, $message='', $delay=null, $messagetype = \core\output\no
     \core\session\manager::write_close();
 
     if ($delay == 0 && !$debugdisableredirect && !headers_sent()) {
+
+        // This helps when debugging redirect issues like loops and it is not clear
+        // which layer in the stack sent the redirect header. If debugging is on
+        // then the file and line is also shown.
+        $redirectby = 'Moodle';
+        if (debugging('', DEBUG_DEVELOPER)) {
+            $origin = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 1)[0];
+            $redirectby .= ' /' . str_replace($CFG->dirroot . '/', '', $origin['file']) . ':' . $origin['line'];
+        }
+        @header("X-Redirect-By: $redirectby");
+
         // 302 might not work for POST requests, 303 is ignored by obsolete clients.
         @header($_SERVER['SERVER_PROTOCOL'] . ' 303 See Other');
         @header('Location: '.$url);

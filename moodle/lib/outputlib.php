@@ -179,12 +179,14 @@ function theme_get_css_filename($themename, $globalrevision, $themerevision, $di
  * @param theme_config[] $themeconfigs An array of theme_config instances.
  * @param array          $directions   Must be a subset of ['rtl', 'ltr'].
  * @param bool           $cache        Should the generated files be stored in local cache.
+ * @return array         The built theme content in a multi-dimensional array of name => direction => content
  */
-function theme_build_css_for_themes($themeconfigs = [], $directions = ['rtl', 'ltr'], $cache = true) {
+function theme_build_css_for_themes($themeconfigs = [], $directions = ['rtl', 'ltr'],
+        $cache = true, $mtraceprogress = false): array {
     global $CFG;
 
     if (empty($themeconfigs)) {
-        return;
+        return [];
     }
 
     require_once("{$CFG->libdir}/csslib.php");
@@ -201,6 +203,11 @@ function theme_build_css_for_themes($themeconfigs = [], $directions = ['rtl', 'l
 
         // First generate all the new css.
         foreach ($directions as $direction) {
+            if ($mtraceprogress) {
+                $timestart = microtime(true);
+                mtrace('Building theme CSS for ' . $themeconfig->name . ' [' .
+                        $direction . '] ...', '');
+            }
             // Lock it on. Technically we should build all themes for SVG and no SVG - but ie9 is out of support.
             $themeconfig->force_svg_use(true);
             $themeconfig->set_rtl_mode(($direction === 'rtl'));
@@ -211,8 +218,11 @@ function theme_build_css_for_themes($themeconfigs = [], $directions = ['rtl', 'l
                 $filename = theme_get_css_filename($themeconfig->name, $themerev, $newrevision, $direction);
                 css_store_css($themeconfig, $filename, $themecss[$direction]);
             }
+            if ($mtraceprogress) {
+                mtrace(' done in ' . round(microtime(true) - $timestart, 2) . ' seconds.');
+            }
         }
-        $themescss[] = $themecss;
+        $themescss[$themeconfig->name] = $themecss;
 
         if ($cache) {
             // Only update the theme revision after we've successfully created the
@@ -267,6 +277,16 @@ function theme_reset_all_caches() {
     if ($PAGE) {
         $PAGE->reload_theme();
     }
+}
+
+/**
+ * Reset static caches.
+ *
+ * This method indicates that all running cron processes should exit at the
+ * next opportunity.
+ */
+function theme_reset_static_caches() {
+    \core\task\manager::clear_static_caches();
 }
 
 /**
@@ -923,12 +943,25 @@ class theme_config {
 
         // First editor plugins.
         $plugins = core_component::get_plugin_list('editor');
-        foreach ($plugins as $plugin=>$fulldir) {
+        foreach ($plugins as $plugin => $fulldir) {
             $sheetfile = "$fulldir/editor_styles.css";
             if (is_readable($sheetfile)) {
                 $files['plugin_'.$plugin] = $sheetfile;
             }
+
+            $subplugintypes = core_component::get_subplugins("editor_{$plugin}");
+            // Fetch sheets for any editor subplugins.
+            foreach ($subplugintypes as $plugintype => $subplugins) {
+                foreach ($subplugins as $subplugin) {
+                    $plugindir = core_component::get_plugin_directory($plugintype, $subplugin);
+                    $sheetfile = "{$plugindir}/editor_styles.css";
+                    if (is_readable($sheetfile)) {
+                        $files["{$plugintype}_{$subplugin}"] = $sheetfile;
+                    }
+                }
+            }
         }
+
         // Then parent themes - base first, the immediate parent last.
         foreach (array_reverse($this->parent_configs) as $parent_config) {
             if (empty($parent_config->editor_sheets)) {
@@ -1207,7 +1240,6 @@ class theme_config {
      * @return string CSS markup
      */
     public function get_css_content_debug($type, $subtype, $sheet) {
-
         if ($type === 'scss') {
             // The SCSS file of the theme is requested.
             $csscontent = $this->get_css_content_from_scss(true);
@@ -1428,8 +1460,35 @@ class theme_config {
         raise_memory_limit(MEMORY_EXTRA);
         core_php_time_limit::raise(300);
 
+        // TODO: MDL-62757 When changing anything in this method please do not forget to check
+        // if the validate() method in class admin_setting_configthemepreset needs updating too.
+
+        $cachedir = make_localcache_directory('scsscache-' . $this->name, false);
+        $cacheoptions = [];
+        if ($themedesigner) {
+            $cacheoptions = array(
+                  'cacheDir' => $cachedir,
+                  'prefix' => 'scssphp_',
+                  'forceRefresh' => false,
+            );
+        } else {
+            if (file_exists($cachedir)) {
+                remove_dir($cachedir);
+            }
+        }
+
         // Set-up the compiler.
-        $compiler = new core_scss();
+        $compiler = new core_scss($cacheoptions);
+
+        if ($this->supports_source_maps($themedesigner)) {
+            // Enable source maps.
+            $compiler->setSourceMapOptions([
+                'sourceMapBasepath' => str_replace('\\', '/', $CFG->dirroot),
+                'sourceMapRootpath' => $CFG->wwwroot . '/'
+            ]);
+            $compiler->setSourceMap($compiler::SOURCE_MAP_INLINE);
+        }
+
         $compiler->prepend_raw_scss($this->get_pre_scss_code());
         if (is_string($scss)) {
             $compiler->set_file($scss);
@@ -1504,7 +1563,7 @@ class theme_config {
      *
      * @return string The SCSS code to inject.
      */
-    protected function get_extra_scss_code() {
+    public function get_extra_scss_code() {
         $content = '';
 
         // Getting all the candidate functions.
@@ -1534,7 +1593,7 @@ class theme_config {
      *
      * @return string The SCSS code to inject.
      */
-    protected function get_pre_scss_code() {
+    public function get_pre_scss_code() {
         $content = '';
 
         // Getting all the candidate functions.
@@ -2172,6 +2231,19 @@ class theme_config {
     }
 
     /**
+     * Checks if source maps are supported
+     *
+     * @param bool $themedesigner True if theme designer is enabled.
+     * @return boolean True if source maps are supported.
+     */
+    public function supports_source_maps($themedesigner): bool {
+        if (empty($this->rtlmode) && $themedesigner) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Whether the theme is being served in RTL mode.
      *
      * @return bool True when in RTL mode.
@@ -2392,22 +2464,22 @@ class theme_config {
      * @return string
      */
     protected function get_region_name($region, $theme) {
-        $regionstring = get_string('region-' . $region, 'theme_' . $theme);
-        // A name exists in this theme, so use it
-        if (substr($regionstring, 0, 1) != '[') {
-            return $regionstring;
+
+        $stringman = get_string_manager();
+
+        // Check if the name is defined in the theme.
+        if ($stringman->string_exists('region-' . $region, 'theme_' . $theme)) {
+            return get_string('region-' . $region, 'theme_' . $theme);
         }
 
-        // Otherwise, try to find one elsewhere
-        // Check parents, if any
+        // Check the theme parents.
         foreach ($this->parents as $parentthemename) {
-            $regionstring = get_string('region-' . $region, 'theme_' . $parentthemename);
-            if (substr($regionstring, 0, 1) != '[') {
-                return $regionstring;
+            if ($stringman->string_exists('region-' . $region, 'theme_' . $parentthemename)) {
+                return get_string('region-' . $region, 'theme_' . $parentthemename);
             }
         }
 
-        // Last resort, try the boost theme for names
+        // Last resort, try the boost theme for names.
         return get_string('region-' . $region, 'theme_boost');
     }
 

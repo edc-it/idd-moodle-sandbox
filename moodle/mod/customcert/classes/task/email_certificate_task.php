@@ -23,6 +23,8 @@
  */
 namespace mod_customcert\task;
 
+use mod_customcert\helper;
+
 defined('MOODLE_INTERNAL') || die();
 
 /**
@@ -105,7 +107,7 @@ class email_certificate_task extends \core\task\scheduled_task {
             $info->certificatename = $certificatename;
 
             // Get a list of all the issues.
-            $userfields = get_all_user_name_fields(true, 'u');
+            $userfields = helper::get_all_user_name_fields('u');
             $sql = "SELECT u.id, u.username, $userfields, u.email, ci.id as issueid, ci.emailed
                       FROM {customcert_issues} ci
                       JOIN {user} u
@@ -211,7 +213,8 @@ class email_certificate_task extends \core\task\scheduled_task {
                     $subject = get_string('emailstudentsubject', 'customcert', $info);
                     $message = $textrenderer->render($renderable);
                     $messagehtml = $htmlrenderer->render($renderable);
-                    email_to_user($user, fullname($userfrom), $subject, $message, $messagehtml, $tempfile, $filename);
+                    email_to_user($user, fullname($userfrom), html_entity_decode($subject), $message, $messagehtml,
+                        $tempfile, $filename);
                 }
 
                 if ($customcert->emailteachers) {
@@ -222,8 +225,8 @@ class email_certificate_task extends \core\task\scheduled_task {
                     $message = $textrenderer->render($renderable);
                     $messagehtml = $htmlrenderer->render($renderable);
                     foreach ($teachers as $teacher) {
-                        email_to_user($teacher, fullname($userfrom), $subject, $message, $messagehtml, $tempfile,
-                            $filename);
+                        email_to_user($teacher, fullname($userfrom), html_entity_decode($subject), $message, $messagehtml,
+                            $tempfile, $filename);
                     }
                 }
 
@@ -242,8 +245,8 @@ class email_certificate_task extends \core\task\scheduled_task {
                             $emailuser = new \stdClass();
                             $emailuser->id = -1;
                             $emailuser->email = $email;
-                            email_to_user($emailuser, fullname($userfrom), $subject, $message, $messagehtml, $tempfile,
-                                $filename);
+                            email_to_user($emailuser, fullname($userfrom), html_entity_decode($subject), $message,
+                                $messagehtml, $tempfile, $filename);
                         }
                     }
                 }

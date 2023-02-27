@@ -17,8 +17,6 @@
  * Template renderer for Moodle. Load and render Moodle templates with Mustache.
  *
  * @module     core/templates
- * @package    core
- * @class      templates
  * @copyright  2015 Damyon Wiese <damyon@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @since      2.9
@@ -65,8 +63,24 @@ define([
     /** @var {Bool} isLoadingTemplates - Whether templates are currently being loaded */
     var isLoadingTemplates = false;
 
-    /** @var {Array} blacklistedNestedHelpers - List of helpers that can't be called within other helpers */
-    var blacklistedNestedHelpers = ['js'];
+    /** @var {Array} disallowedNestedHelpers - List of helpers that can't be called within other helpers */
+    var disallowedNestedHelpers = ['js'];
+
+    /**
+     * Normalise the provided component such that '', 'moodle', and 'core' are treated consistently.
+     *
+     * @param   {String} component
+     * @returns {String}
+     */
+    var getNormalisedComponent = function(component) {
+        if (component) {
+            if (component !== 'moodle' && component !== 'core') {
+                return component;
+            }
+        }
+
+        return 'core';
+    };
 
     /**
      * Search the various caches for a template promise for the given search key.
@@ -79,11 +93,6 @@ define([
      * @return {Object} jQuery promise resolved with the template source
      */
     var getTemplatePromiseFromCache = function(searchKey) {
-        // Do not cache anything if templaterev is not valid.
-        if (M.cfg.templaterev <= 0) {
-            return null;
-        }
-
         // First try the cache of promises.
         if (searchKey in templatePromises) {
             return templatePromises[searchKey];
@@ -94,6 +103,11 @@ define([
             // Add this to the promises cache for future.
             templatePromises[searchKey] = $.Deferred().resolve(templateCache[searchKey]).promise();
             return templatePromises[searchKey];
+        }
+
+        if (M.cfg.templaterev <= 0) {
+            // Template caching is disabled. Do not store in persistent storage.
+            return null;
         }
 
         // Now try local storage.
@@ -133,7 +147,7 @@ define([
         var requests = [];
         // Get a list of promises for each of the templates we need to load.
         var templatePromises = templatesToLoad.map(function(templateData) {
-            var component = templateData.component;
+            var component = getNormalisedComponent(templateData.component);
             var name = templateData.name;
             var searchKey = templateData.searchKey;
             var theme = templateData.theme;
@@ -177,13 +191,18 @@ define([
                             // Process all of the template dependencies for this template and add
                             // them to the caches so that we don't request them again later.
                             response.templates.forEach(function(data) {
+                                data.component = getNormalisedComponent(data.component);
                                 // Generate the search key for this template in the response so that we
                                 // can add it to the caches.
                                 var tempSearchKey = [theme, data.component, data.name].join('/');
                                 // Cache all of the dependent templates because we'll need them to render
                                 // the requested template.
                                 templateCache[tempSearchKey] = data.value;
-                                storage.set('core_template/' + M.cfg.templaterev + ':' + tempSearchKey, data.value);
+
+                                if (M.cfg.templaterev > 0) {
+                                    // The template cache is enabled - set the value there.
+                                    storage.set('core_template/' + M.cfg.templaterev + ':' + tempSearchKey, data.value);
+                                }
 
                                 if (data.component == component && data.name == name) {
                                     // This is the original template that was requested so remember it to return.
@@ -196,7 +215,7 @@ define([
                                 // with them now so that we don't need to re-fetch them.
                                 str.cache_strings(response.strings.map(function(data) {
                                     return {
-                                        component: data.component,
+                                        component: getNormalisedComponent(data.component),
                                         key: data.name,
                                         value: data.value
                                     };
@@ -298,7 +317,7 @@ define([
             return cachedPromise;
         }
 
-        // Check the buffer to seee if this template has already been added.
+        // Check the buffer to see if this template has already been added.
         var existingBufferRecords = loadTemplateBuffer.filter(function(record) {
             return record.searchKey == searchKey;
         });
@@ -311,7 +330,7 @@ define([
         // This is the first time this has been requested so let's add it to the buffer
         // to be loaded.
         var parts = templateName.split('/');
-        var component = parts.shift();
+        var component = getNormalisedComponent(parts.shift());
         var name = parts.join('/');
         var deferred = $.Deferred();
 
@@ -327,6 +346,50 @@ define([
         // We know there is at least one thing in the buffer so kick off a processing run.
         processLoadTemplateBuffer();
         return deferred.promise();
+    };
+
+    /**
+     * Prefetch a set of templates without rendering them.
+     *
+     * @param {Array} templateNames The list of templates to fetch
+     * @param {String} currentTheme
+     */
+    Renderer.prototype.prefetchTemplates = function(templateNames, currentTheme) {
+        templateNames.forEach(function(templateName) {
+            var searchKey = currentTheme + '/' + templateName;
+
+            // If we haven't already seen this template then buffer it.
+            if (getTemplatePromiseFromCache(searchKey)) {
+                return;
+            }
+
+            // Check the buffer to see if this template has already been added.
+            var existingBufferRecords = loadTemplateBuffer.filter(function(record) {
+                return record.searchKey == searchKey;
+            });
+
+            if (existingBufferRecords.length) {
+                // This template is already in the buffer so just return the existing promise.
+                // No need to add it to the buffer again.
+                return;
+            }
+
+            // This is the first time this has been requested so let's add it to the buffer to be loaded.
+            var parts = templateName.split('/');
+            var component = getNormalisedComponent(parts.shift());
+            var name = parts.join('/');
+
+            // Add this template to the buffer to be loaded.
+            loadTemplateBuffer.push({
+                component: component,
+                name: name,
+                theme: currentTheme,
+                searchKey: searchKey,
+                deferred: $.Deferred(),
+            });
+        });
+
+        processLoadTemplateBuffer();
     };
 
     /**
@@ -361,6 +424,7 @@ define([
     Renderer.prototype.renderIcon = function(key, component, title) {
         // Preload the module to do the icon rendering based on the theme iconsystem.
         var modulename = config.iconsystemmodule;
+        component = getNormalisedComponent(component);
 
         // RequireJS does not return a promise.
         var ready = $.Deferred();
@@ -377,7 +441,12 @@ define([
         return ready.then(function(iconSystem) {
             return this.getTemplate(iconSystem.getTemplateName());
         }.bind(this)).then(function(template) {
-            return iconSystem.renderIcon(key, component, title, template);
+            return iconSystem.renderIcon(
+                key,
+                component,
+                title,
+                template
+            );
         });
     };
 
@@ -408,15 +477,21 @@ define([
         }
 
         var templateName = iconSystem.getTemplateName();
-
         var searchKey = this.currentThemeName + '/' + templateName;
         var template = templateCache[searchKey];
+
+        component = getNormalisedComponent(component);
 
         // The key might have been escaped by the JS Mustache engine which
         // converts forward slashes to HTML entities. Let us undo that here.
         key = key.replace(/&#x2F;/gi, '/');
 
-        return iconSystem.renderIcon(key, component, text, template);
+        return iconSystem.renderIcon(
+            key,
+            component,
+            text,
+            template
+        );
     };
 
     /**
@@ -460,6 +535,8 @@ define([
             param = parts.join(',').trim();
         }
 
+        component = getNormalisedComponent(component);
+
         if (param !== '') {
             // Allow variable expansion in the param part only.
             param = helper(param, context);
@@ -470,10 +547,33 @@ define([
         }
 
         var index = this.requiredStrings.length;
-        this.requiredStrings.push({key: key, component: component, param: param});
+        this.requiredStrings.push({
+            key: key,
+            component: component,
+            param: param
+        });
 
         // The placeholder must not use {{}} as those can be misinterpreted by the engine.
         return '[[_s' + index + ']]';
+    };
+
+    /**
+     * String helper to render {{#cleanstr}}abd component { a : 'fish'}{{/cleanstr}}
+     * into a get_string following by an HTML escape.
+     *
+     * @method cleanStringHelper
+     * @private
+     * @param {object} context The current mustache context.
+     * @param {string} sectionText The text to parse the arguments from.
+     * @param {function} helper Used to render subsections of the text.
+     * @return {string}
+     */
+    Renderer.prototype.cleanStringHelper = function(context, sectionText, helper) {
+        var str = this.stringHelper(context, sectionText, helper);
+
+        // We're going to use [[_cx]] format for clean strings, where x is a number.
+        // Hence, replacing 's' with 'c' in the placeholder that stringHelper returns.
+        return str.replace('s', 'c');
     };
 
     /**
@@ -493,7 +593,8 @@ define([
         // This involves wrapping {{, and }} in change delimeter tags.
         content = content
             .replace(/"/g, '\\"')
-            .replace(/([\{\}]{2,3})/g, '{{=<% %>=}}$1<%={{ }}=%>')
+            .replace(/\t/g, '&#9;')
+            .replace(/([{}]{2,3})/g, '{{=<% %>=}}$1<%={{ }}=%>')
             .replace(/(\r\n|\r|\n)/g, '&#x0a;')
             ;
         return '"' + content + '"';
@@ -557,7 +658,7 @@ define([
      * template.
      *
      * This will parse the provided text before giving it to the helper function
-     * in order to remove any blacklisted nested helpers to prevent one helper
+     * in order to remove any disallowed nested helpers to prevent one helper
      * from calling another.
      *
      * In particular to prevent the JS helper from being called from within another
@@ -571,12 +672,12 @@ define([
     Renderer.prototype.addHelperFunction = function(helperFunction, context) {
         return function() {
             return function(sectionText, helper) {
-                // Override the blacklisted helpers in the template context with
+                // Override the disallowed helpers in the template context with
                 // a function that returns an empty string for use when executing
                 // other helpers. This is to prevent these helpers from being
                 // executed as part of the rendering of another helper in order to
                 // prevent any potential security issues.
-                var originalHelpers = blacklistedNestedHelpers.reduce(function(carry, name) {
+                var originalHelpers = disallowedNestedHelpers.reduce(function(carry, name) {
                     if (context.hasOwnProperty(name)) {
                         carry[name] = context[name];
                     }
@@ -584,14 +685,14 @@ define([
                     return carry;
                 }, {});
 
-                blacklistedNestedHelpers.forEach(function(helperName) {
+                disallowedNestedHelpers.forEach(function(helperName) {
                     context[helperName] = function() {
                         return '';
                     };
                 });
 
                 // Execute the helper with the modified context that doesn't include
-                // the blacklisted nested helpers. This prevents the blacklisted
+                // the disallowed nested helpers. This prevents the disallowed
                 // helpers from being called from within other helpers.
                 var result = helperFunction.apply(this, [context, sectionText, helper]);
 
@@ -621,6 +722,7 @@ define([
         this.requiredJS = [];
         context.uniqid = (uniqInstances++);
         context.str = this.addHelperFunction(this.stringHelper, context);
+        context.cleanstr = this.addHelperFunction(this.cleanStringHelper, context);
         context.pix = this.addHelperFunction(this.pixHelper, context);
         context.js = this.addHelperFunction(this.jsHelper, context);
         context.quote = this.addHelperFunction(this.quoteHelper, context);
@@ -664,13 +766,14 @@ define([
      * @return {String} The treated content.
      */
     Renderer.prototype.treatStringsInContent = function(content, strings) {
-        var pattern = /\[\[_s\d+\]\]/,
+        var pattern = /\[\[_(s|c)\d+\]\]/,
             treated,
             index,
             strIndex,
             walker,
             char,
-            strFinal;
+            strFinal,
+            isClean;
 
         do {
             treated = '';
@@ -680,8 +783,9 @@ define([
                 // Copy the part prior to the placeholder to the treated string.
                 treated += content.substring(0, index);
                 content = content.substr(index);
+                isClean = content[3] == 'c';
                 strIndex = '';
-                walker = 4; // 4 is the length of '[[_s'.
+                walker = 4; // 4 is the length of either '[[_s' or '[[_c'.
 
                 // Walk the characters to manually extract the index of the string from the placeholder.
                 char = content.substr(walker, 1);
@@ -694,11 +798,15 @@ define([
                 // Get the string, add it to the treated result, and remove the placeholder from the content to treat.
                 strFinal = strings[parseInt(strIndex, 10)];
                 if (typeof strFinal === 'undefined') {
-                    Log.debug('Could not find string for pattern [[_s' + strIndex + ']].');
+                    Log.debug('Could not find string for pattern [[_' + (isClean ? 'c' : 's') + strIndex + ']].');
                     strFinal = '';
                 }
+                if (isClean) {
+                    strFinal = mustache.escape(strFinal);
+                }
                 treated += strFinal;
-                content = content.substr(6 + strIndex.length); // 6 is the length of the placeholder without the index: '[[_s]]'.
+                content = content.substr(6 + strIndex.length); // 6 is the length of the placeholder without the index.
+                                                               // That's either '[[_s]]' or '[[_c]]'.
 
                 // Find the next placeholder.
                 index = content.search(pattern);
@@ -824,6 +932,7 @@ define([
      * @param {String} newHTML - HTML to insert / replace.
      * @param {String} newJS - Javascript to run after the insertion.
      * @param {Boolean} replaceChildNodes - Replace only the childnodes, alternative is to replace the entire node.
+     * @return {Array} The list of new DOM Nodes
      */
     var domReplace = function(element, newHTML, newJS, replaceChildNodes) {
         var replaceNode = $(element);
@@ -852,7 +961,11 @@ define([
             runTemplateJS(newJS);
             // Notify all filters about the new content.
             event.notifyFilterContentUpdated(newNodes);
+
+            return newNodes.get();
         }
+
+        return [];
     };
 
     /**
@@ -991,17 +1104,23 @@ define([
      * @param {jQuery|String} element - Element or selector to prepend HTML to
      * @param {String} html - HTML to prepend
      * @param {String} js - Javascript to run after we prepend the html
+     * @return {Array} The list of new DOM Nodes
      */
     var domPrepend = function(element, html, js) {
         var node = $(element);
         if (node.length) {
             // Prepend the html.
-            node.prepend(html);
+            var newContent = $(html);
+            node.prepend(newContent);
             // Run any javascript associated with the new HTML.
             runTemplateJS(js);
             // Notify all filters about the new content.
             event.notifyFilterContentUpdated(node);
+
+            return newContent.get();
         }
+
+        return [];
     };
 
     /**
@@ -1012,17 +1131,23 @@ define([
      * @param {jQuery|String} element - Element or selector to append HTML to
      * @param {String} html - HTML to append
      * @param {String} js - Javascript to run after we append the html
+     * @return {Array} The list of new DOM Nodes
      */
     var domAppend = function(element, html, js) {
         var node = $(element);
         if (node.length) {
             // Append the html.
-            node.append(html);
+            var newContent = $(html);
+            node.append(newContent);
             // Run any javascript associated with the new HTML.
             runTemplateJS(js);
             // Notify all filters about the new content.
             event.notifyFilterContentUpdated(node);
+
+            return newContent.get();
         }
+
+        return [];
     };
 
     return /** @alias module:core/templates */ {
@@ -1043,6 +1168,25 @@ define([
         render: function(templateName, context, themeName) {
             var renderer = new Renderer();
             return renderer.render(templateName, context, themeName);
+        },
+
+        /**
+         * Prefetch a set of templates without rendering them.
+         *
+         * @method getTemplate
+         * @param {Array} templateNames The list of templates to fetch
+         * @param {String} themeName
+         * @returns {Promise}
+         */
+        prefetchTemplates: function(templateNames, themeName) {
+            var renderer = new Renderer();
+
+            if (typeof themeName === "undefined") {
+                // System context by default.
+                themeName = config.theme;
+            }
+
+            return renderer.prefetchTemplates(templateNames, themeName);
         },
 
         /**
@@ -1085,7 +1229,11 @@ define([
          */
         renderPix: function(key, component, title) {
             var renderer = new Renderer();
-            return renderer.renderIcon(key, component, title);
+            return renderer.renderIcon(
+                key,
+                getNormalisedComponent(component),
+                title
+            );
         },
 
         /**
@@ -1104,9 +1252,10 @@ define([
          * @param {JQuery} element - Element or selector to replace.
          * @param {String} newHTML - HTML to insert / replace.
          * @param {String} newJS - Javascript to run after the insertion.
+         * @return {Array} The list of new DOM Nodes
          */
         replaceNodeContents: function(element, newHTML, newJS) {
-            domReplace(element, newHTML, newJS, true);
+            return domReplace(element, newHTML, newJS, true);
         },
 
         /**
@@ -1116,9 +1265,10 @@ define([
          * @param {JQuery} element - Element or selector to replace.
          * @param {String} newHTML - HTML to insert / replace.
          * @param {String} newJS - Javascript to run after the insertion.
+         * @return {Array} The list of new DOM Nodes
          */
         replaceNode: function(element, newHTML, newJS) {
-            domReplace(element, newHTML, newJS, false);
+            return domReplace(element, newHTML, newJS, false);
         },
 
         /**
@@ -1128,9 +1278,10 @@ define([
          * @param {jQuery|String} element - Element or selector to prepend HTML to
          * @param {String} html - HTML to prepend
          * @param {String} js - Javascript to run after we prepend the html
+         * @return {Array} The list of new DOM Nodes
          */
         prependNodeContents: function(element, html, js) {
-            domPrepend(element, html, js);
+            return domPrepend(element, html, js);
         },
 
         /**
@@ -1140,9 +1291,10 @@ define([
          * @param {jQuery|String} element - Element or selector to append HTML to
          * @param {String} html - HTML to append
          * @param {String} js - Javascript to run after we append the html
+         * @return {Array} The list of new DOM Nodes
          */
         appendNodeContents: function(element, html, js) {
-            domAppend(element, html, js);
+            return domAppend(element, html, js);
         },
     };
 });

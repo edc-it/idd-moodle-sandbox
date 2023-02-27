@@ -79,12 +79,6 @@ class core_user_external extends external_api {
             // Interests.
             'interests' => new external_value(PARAM_TEXT, 'User interests (separated by commas)', VALUE_OPTIONAL),
             // Optional.
-            'url' => new external_value(core_user::get_property_type('url'), 'User web page', VALUE_OPTIONAL),
-            'icq' => new external_value(core_user::get_property_type('icq'), 'ICQ number', VALUE_OPTIONAL),
-            'skype' => new external_value(core_user::get_property_type('skype'), 'Skype ID', VALUE_OPTIONAL),
-            'aim' => new external_value(core_user::get_property_type('aim'), 'AIM ID', VALUE_OPTIONAL),
-            'yahoo' => new external_value(core_user::get_property_type('yahoo'), 'Yahoo ID', VALUE_OPTIONAL),
-            'msn' => new external_value(core_user::get_property_type('msn'), 'MSN ID', VALUE_OPTIONAL),
             'idnumber' => new external_value(core_user::get_property_type('idnumber'),
                 'An arbitrary ID code number perhaps from the institution', VALUE_DEFAULT, ''),
             'institution' => new external_value(core_user::get_property_type('institution'), 'institution', VALUE_OPTIONAL),
@@ -503,12 +497,6 @@ class core_user_external extends external_api {
             // Interests.
             'interests' => new external_value(PARAM_TEXT, 'User interests (separated by commas)', VALUE_OPTIONAL),
             // Optional.
-            'url' => new external_value(core_user::get_property_type('url'), 'User web page', VALUE_OPTIONAL),
-            'icq' => new external_value(core_user::get_property_type('icq'), 'ICQ number', VALUE_OPTIONAL),
-            'skype' => new external_value(core_user::get_property_type('skype'), 'Skype ID', VALUE_OPTIONAL),
-            'aim' => new external_value(core_user::get_property_type('aim'), 'AIM ID', VALUE_OPTIONAL),
-            'yahoo' => new external_value(core_user::get_property_type('yahoo'), 'Yahoo ID', VALUE_OPTIONAL),
-            'msn' => new external_value(core_user::get_property_type('msn'), 'MSN ID', VALUE_OPTIONAL),
             'idnumber' => new external_value(core_user::get_property_type('idnumber'),
                 'An arbitrary ID code number perhaps from the institution', VALUE_OPTIONAL),
             'institution' => new external_value(core_user::get_property_type('institution'), 'Institution', VALUE_OPTIONAL),
@@ -574,7 +562,7 @@ class core_user_external extends external_api {
         $filemanageroptions = array('maxbytes' => $CFG->maxbytes,
                 'subdirs'        => 0,
                 'maxfiles'       => 1,
-                'accepted_types' => 'web_image');
+                'accepted_types' => 'optimised_image');
 
         $transaction = $DB->start_delegated_transaction();
 
@@ -1093,11 +1081,6 @@ class core_user_external extends external_api {
             'address'     => new external_value(core_user::get_property_type('address'), 'Postal address', VALUE_OPTIONAL),
             'phone1'      => new external_value(core_user::get_property_type('phone1'), 'Phone 1', VALUE_OPTIONAL),
             'phone2'      => new external_value(core_user::get_property_type('phone2'), 'Phone 2', VALUE_OPTIONAL),
-            'icq'         => new external_value(core_user::get_property_type('icq'), 'icq number', VALUE_OPTIONAL),
-            'skype'       => new external_value(core_user::get_property_type('skype'), 'skype id', VALUE_OPTIONAL),
-            'yahoo'       => new external_value(core_user::get_property_type('yahoo'), 'yahoo id', VALUE_OPTIONAL),
-            'aim'         => new external_value(core_user::get_property_type('aim'), 'aim id', VALUE_OPTIONAL),
-            'msn'         => new external_value(core_user::get_property_type('msn'), 'msn number', VALUE_OPTIONAL),
             'department'  => new external_value(core_user::get_property_type('department'), 'department', VALUE_OPTIONAL),
             'institution' => new external_value(core_user::get_property_type('institution'), 'institution', VALUE_OPTIONAL),
             'idnumber'    => new external_value(core_user::get_property_type('idnumber'), 'An arbitrary ID code number perhaps from the institution', VALUE_OPTIONAL),
@@ -1115,7 +1098,6 @@ class core_user_external extends external_api {
             'description' => new external_value(core_user::get_property_type('description'), 'User profile description', VALUE_OPTIONAL),
             'descriptionformat' => new external_format_value(core_user::get_property_type('descriptionformat'), VALUE_OPTIONAL),
             'city'        => new external_value(core_user::get_property_type('city'), 'Home city of the user', VALUE_OPTIONAL),
-            'url'         => new external_value(core_user::get_property_type('url'), 'URL of the user', VALUE_OPTIONAL),
             'country'     => new external_value(core_user::get_property_type('country'), 'Home country code of the user, such as AU or CZ', VALUE_OPTIONAL),
             'profileimageurlsmall' => new external_value(PARAM_URL, 'User image profile URL - small version'),
             'profileimageurl' => new external_value(PARAM_URL, 'User image profile URL - big version'),
@@ -1707,7 +1689,12 @@ class core_user_external extends external_api {
             throw new moodle_exception('noprofileedit', 'auth');
         }
 
-        $filemanageroptions = array('maxbytes' => $CFG->maxbytes, 'subdirs' => 0, 'maxfiles' => 1, 'accepted_types' => 'web_image');
+        $filemanageroptions = array(
+            'maxbytes' => $CFG->maxbytes,
+            'subdirs' => 0,
+            'maxfiles' => 1,
+            'accepted_types' => 'optimised_image'
+        );
         $user->deletepicture = $params['delete'];
         $user->imagefile = $params['draftitemid'];
         $success = core_user::update_picture($user, $filemanageroptions);

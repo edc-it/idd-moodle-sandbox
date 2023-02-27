@@ -25,6 +25,12 @@ if ($hassiteconfig or has_any_capability($capabilities, $systemcontext)) { // sp
     $temp->add(new admin_setting_configcheckbox('allowcohortthemes',  new lang_string('allowcohortthemes', 'admin'), new lang_string('configallowcohortthemes', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('allowthemechangeonurl',  new lang_string('allowthemechangeonurl', 'admin'), new lang_string('configallowthemechangeonurl', 'admin'), 0));
     $temp->add(new admin_setting_configcheckbox('allowuserblockhiding', new lang_string('allowuserblockhiding', 'admin'), new lang_string('configallowuserblockhiding', 'admin'), 1));
+    $temp->add(new admin_setting_configcheckbox('langmenuinsecurelayout',
+        new lang_string('langmenuinsecurelayout', 'admin'),
+        new lang_string('langmenuinsecurelayout_desc', 'admin'), 0));
+    $temp->add(new admin_setting_configcheckbox('logininfoinsecurelayout',
+        new lang_string('logininfoinsecurelayout', 'admin'),
+        new lang_string('logininfoinsecurelayout_desc', 'admin'), 0));
     $temp->add(new admin_setting_configtextarea('custommenuitems', new lang_string('custommenuitems', 'admin'),
         new lang_string('configcustommenuitems', 'admin'), '', PARAM_RAW, '50', '10'));
     $temp->add(new admin_setting_configtextarea(
@@ -263,7 +269,6 @@ preferences,moodle|/user/preferences.php|t/preferences',
     $setting = new admin_setting_configcheckbox('cachejs', new lang_string('cachejs', 'admin'), new lang_string('cachejs_help', 'admin'), 1);
     $setting->set_updatedcallback('js_reset_all_caches');
     $temp->add($setting);
-    $temp->add(new admin_setting_configcheckbox('modchooserdefault', new lang_string('modchooserdefault', 'admin'), new lang_string('configmodchooserdefault', 'admin'), 1));
     $ADMIN->add('appearance', $temp);
 
     // Link to tag management interface.

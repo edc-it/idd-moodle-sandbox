@@ -1,5 +1,3 @@
-/* global DIALOGUE_PREFIX, BASE */
-
 /**
  * The generic dialogue class for use in Moodle.
  *
@@ -15,7 +13,12 @@ var DIALOGUE_NAME = 'Moodle dialogue',
     MENUBAR_SELECTOR = '[role=menubar]',
     DOT = '.',
     HAS_ZINDEX = 'moodle-has-zindex',
-    CAN_RECEIVE_FOCUS_SELECTOR = 'input:not([type="hidden"]), a[href], button, textarea, select, [tabindex]',
+    CAN_RECEIVE_FOCUS_SELECTOR = 'input:not([type="hidden"]):not([disabled]):not([tabindex^="-"]),' +
+        'a[href]:not([disabled]):not([tabindex^="-"]),' +
+        'button:not([disabled]):not([tabindex^="-"]),' +
+        'textarea:not([disabled]):not([tabindex^="-"]),' +
+        'select:not([disabled]):not([tabindex^="-"]),' +
+        '[tabindex]:not([disabled]):not([tabindex^="-"])',
     FORM_SELECTOR = 'form';
 
 /**
@@ -35,12 +38,14 @@ DIALOGUE = function(config) {
     // Note: additional classes can be added to this content node by setting the 'additionalBaseClass' config property (a string).
     var id = 'moodle-dialogue-' + Y.stamp(this) + '-wrap'; // Can't use this.get('id') as it's not set at this stage.
     config.notificationBase =
-        Y.Node.create('<div class="' + CSS.BASE + '">')
-              .append(Y.Node.create('<div id="' + id + '" role="dialog" ' +
-                                    'aria-labelledby="' + id + '-header-text" class="' + CSS.WRAP + '"  aria-live="polite"></div>')
-              .append(Y.Node.create('<div id="' + id + '-header-text" class="' + CSS.HEADER + ' yui3-widget-hd"></div>'))
-              .append(Y.Node.create('<div class="' + CSS.BODY + ' yui3-widget-bd"></div>'))
-              .append(Y.Node.create('<div class="' + CSS.FOOTER + ' yui3-widget-ft"></div>')));
+        Y.Node.create('<div class="' + CSS_CLASSES.BASE + '">')
+            .append(Y.Node.create(
+                '<div id="' + id + '" role="dialog" ' +
+                'aria-labelledby="' + id + '-header-text" class="' + CSS_CLASSES.WRAP + '"  aria-live="polite"></div>'
+            )
+            .append(Y.Node.create('<div class="' + CSS_CLASSES.HEADER + ' yui3-widget-hd"></div>'))
+            .append(Y.Node.create('<div class="' + CSS_CLASSES.BODY + ' yui3-widget-bd"></div>'))
+            .append(Y.Node.create('<div class="' + CSS_CLASSES.FOOTER + ' yui3-widget-ft"></div>')));
     Y.one(document.body).append(config.notificationBase);
     config.srcNode = '#' + id;
     delete config.buttons; // Don't let anyone pass in buttons as we want to control these during init. addButton can be used later.
@@ -97,9 +102,15 @@ Y.extend(DIALOGUE, Y.Panel, {
         var bb;
 
         if (this.get('closeButton') !== false) {
-            // The buttons constructor does not allow custom attributes
-            this.get('buttons').header[0].setAttribute('title', this.get('closeButtonTitle'));
+            var title = this.get('closeButtonTitle');
+            // The buttons constructor does not allow custom attributes.
+            this.get('buttons').header[0].setAttribute('title', title);
+            this.get('buttons').header[0].setAttribute('aria-label', title);
         }
+
+        this.setStdModContent(Y.WidgetStdMod.HEADER,
+            '<h5 id="' + this.get('id') + '-wrap-header-text">' + this.get('headerContent') + '</h5>',
+            Y.WidgetStdMod.REPLACE);
 
         // Initialise the element cache.
         this._hiddenSiblings = [];
@@ -135,6 +146,13 @@ Y.extend(DIALOGUE, Y.Panel, {
 
         if (this.get('visible')) {
             this.applyZIndex();
+            this.applyAndTrapFocus();
+            // Only do accessibility hiding for modals because the ARIA spec
+            // says that all ARIA dialogues should be modal.
+            if (this.get('modal')) {
+                // Make this dialogue visible to screen readers.
+                this.setAccessibilityVisible();
+            }
         }
         // Recalculate the zIndex every time the modal is altered.
         this.on('maskShow', this.applyZIndex);
@@ -249,7 +267,7 @@ Y.extend(DIALOGUE, Y.Panel, {
     visibilityChanged: function(e) {
         var titlebar, bb;
         if (e.attrName === 'visible') {
-            this.get('maskNode').addClass(CSS.LIGHTBOX);
+            this.get('maskNode').addClass(CSS_CLASSES.LIGHTBOX);
             // Going from visible to hidden.
             if (e.prevVal && !e.newVal) {
                 bb = this.get('boundingBox');
@@ -279,15 +297,11 @@ Y.extend(DIALOGUE, Y.Panel, {
                 this.makeResponsive();
                 if (!this.shouldResizeFullscreen()) {
                     if (this.get('draggable')) {
-                        titlebar = '#' + this.get('id') + ' .' + CSS.HEADER;
+                        titlebar = '#' + this.get('id') + ' .' + CSS_CLASSES.HEADER;
                         this.plug(Y.Plugin.Drag, {handles: [titlebar]});
                         Y.one(titlebar).setStyle('cursor', 'move');
                     }
                 }
-                require(['core/local/aria/focuslock'], function(FocusLockManager) {
-                    // Trap focus to the current bounding box.
-                    FocusLockManager.trapFocus(this.get('boundingBox').getDOMNode());
-                }.bind(this));
 
                 // Only do accessibility hiding for modals because the ARIA spec
                 // says that all ARIA dialogues should be modal.
@@ -378,35 +392,17 @@ Y.extend(DIALOGUE, Y.Panel, {
                Math.floor(Y.one(document.body).get('winWidth')) < this.get('responsiveWidth');
     },
 
+    _focus: function() {
+        this.focus();
+    },
+
     show: function() {
-        var result = null,
-            header = this.headerNode,
-            content = this.bodyNode,
-            focusSelector = this.get('focusOnShowSelector'),
-            focusNode = null;
-
-        result = DIALOGUE.superclass.show.call(this);
-
+        var result = DIALOGUE.superclass.show.call(this);
         if (!this.get('center') && this._originalPosition) {
             // Restore the dialogue position to it's location before it was moved at show time.
             this.get('boundingBox').setXY(this._originalPosition);
         }
-
-        // Try and find a node to focus on using the focusOnShowSelector attribute.
-        if (focusSelector !== null) {
-            focusNode = this.get('boundingBox').one(focusSelector);
-        }
-        if (!focusNode) {
-            // Fall back to the header or the content if no focus node was found yet.
-            if (header && header !== '') {
-                focusNode = header;
-            } else if (content && content !== '') {
-                focusNode = content;
-            }
-        }
-        if (focusNode) {
-            focusNode.focus();
-        }
+        this.applyAndTrapFocus();
         return result;
     },
 
@@ -529,7 +525,37 @@ Y.extend(DIALOGUE, Y.Panel, {
 
         // Clear the cache. No longer need to store these.
         this._hiddenSiblings = [];
-    }
+    },
+
+    /**
+     * Focuses on the node specified by focusOnShowSelector, or the first focusable node if nothing is specified.
+     * It also traps the focus to the current bounding box.
+     *
+     * @method applyAndTrapFocus
+     */
+    applyAndTrapFocus: function() {
+        var content = this.bodyNode;
+        var focusSelector = this.get('focusOnShowSelector');
+        var focusNode = null;
+
+        // Try and find a node to focus on using the focusOnShowSelector attribute.
+        if (focusSelector !== null) {
+            focusNode = this.get('boundingBox').one(focusSelector);
+        }
+        if (!focusNode) {
+            // Fall back to the first focusable element in the body of the dialogue if no focus node was found yet.
+            if (content && content !== '') {
+                focusNode = content.one(CAN_RECEIVE_FOCUS_SELECTOR);
+            }
+        }
+        require(['core/local/aria/focuslock'], function(FocusLockManager) {
+            // Trap focus to the current bounding box.
+            FocusLockManager.trapFocus(this.get('boundingBox').getDOMNode());
+            if (focusNode) {
+                focusNode.focus();
+            }
+        }.bind(this));
+    },
 }, {
     NAME: DIALOGUE_NAME,
     CSS_PREFIX: DIALOGUE_PREFIX,

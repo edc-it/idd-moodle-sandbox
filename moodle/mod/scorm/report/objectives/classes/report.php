@@ -92,28 +92,19 @@ class report extends \mod_scorm\report {
                 && ($attemptsmode != SCORM_REPORT_ATTEMPTS_STUDENTS_WITH_NO);
         // Select the students.
         $nostudents = false;
-
+        list($allowedlistsql, $params) = get_enrolled_sql($contextmodule, 'mod/scorm:savetrack', (int) $currentgroup);
         if (empty($currentgroup)) {
             // All users who can attempt scoes.
-            if (!$students = get_users_by_capability($contextmodule, 'mod/scorm:savetrack', 'u.id', '', '', '', '', '', false)) {
+            if (!$DB->record_exists_sql($allowedlistsql, $params)) {
                 echo $OUTPUT->notification(get_string('nostudentsyet'));
                 $nostudents = true;
-                $allowedlist = '';
-            } else {
-                $allowedlist = array_keys($students);
             }
-            unset($students);
         } else {
             // All users who can attempt scoes and who are in the currently selected group.
-            $groupstudents = get_users_by_capability($contextmodule, 'mod/scorm:savetrack',
-                                                     'u.id', '', '', '', $currentgroup, '', false);
-            if (!$groupstudents) {
+            if (!$DB->record_exists_sql($allowedlistsql, $params)) {
                 echo $OUTPUT->notification(get_string('nostudentsingroup'));
                 $nostudents = true;
-                $groupstudents = array();
             }
-            $allowedlist = array_keys($groupstudents);
-            unset($groupstudents);
         }
         if ( !$nostudents ) {
             // Now check if asked download of data.
@@ -136,10 +127,11 @@ class report extends \mod_scorm\report {
             $columns[] = 'fullname';
             $headers[] = get_string('name');
 
-            $extrafields = get_extra_user_fields($coursecontext);
+            // TODO Does not support custom user profile fields (MDL-70456).
+            $extrafields = \core_user\fields::get_identity_fields($coursecontext, false);
             foreach ($extrafields as $field) {
                 $columns[] = $field;
-                $headers[] = get_user_field_name($field);
+                $headers[] = \core_user\fields::get_display_name($field);
             }
             $columns[] = 'attempt';
             $headers[] = get_string('attempt', 'scorm');
@@ -157,13 +149,12 @@ class report extends \mod_scorm\report {
                 }
             }
 
-            $params = array();
-            list($usql, $params) = $DB->get_in_or_equal($allowedlist, SQL_PARAMS_NAMED);
             // Construct the SQL.
             $select = 'SELECT DISTINCT '.$DB->sql_concat('u.id', '\'#\'', 'COALESCE(st.attempt, 0)').' AS uniqueid, ';
-            $select .= 'st.scormid AS scormid, st.attempt AS attempt, ' .
-                    \user_picture::fields('u', array('idnumber'), 'userid') .
-                    get_extra_user_fields_sql($coursecontext, 'u', '', array('email', 'idnumber')) . ' ';
+            // TODO Does not support custom user profile fields (MDL-70456).
+            $userfields = \core_user\fields::for_identity($coursecontext, false)->with_userpic()->including('idnumber');
+            $selectfields = $userfields->get_sql('u', false, '', 'userid')->selects;
+            $select .= 'st.scormid AS scormid, st.attempt AS attempt ' . $selectfields . ' ';
 
             // This part is the same for all cases - join users and scorm_scoes_track tables.
             $from = 'FROM {user} u ';
@@ -171,15 +162,15 @@ class report extends \mod_scorm\report {
             switch ($attemptsmode) {
                 case SCORM_REPORT_ATTEMPTS_STUDENTS_WITH:
                     // Show only students with attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND st.userid IS NOT NULL';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND st.userid IS NOT NULL";
                     break;
                 case SCORM_REPORT_ATTEMPTS_STUDENTS_WITH_NO:
                     // Show only students without attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND st.userid IS NULL';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND st.userid IS NULL";
                     break;
                 case SCORM_REPORT_ATTEMPTS_ALL_STUDENTS:
                     // Show all students with or without attempts.
-                    $where = ' WHERE u.id ' .$usql. ' AND (st.userid IS NOT NULL OR st.userid IS NULL)';
+                    $where = " WHERE u.id IN ({$allowedlistsql}) AND (st.userid IS NOT NULL OR st.userid IS NULL)";
                     break;
             }
 
@@ -423,7 +414,7 @@ class report extends \mod_scorm\report {
                     }
                     if (in_array('picture', $columns)) {
                         $user = new \stdClass();
-                        $additionalfields = explode(',', \user_picture::fields());
+                        $additionalfields = explode(',', implode(',', \core_user\fields::get_picture_fields()));
                         $user = username_load_fields_from_object($user, $scouser, null, $additionalfields);
                         $user->id = $scouser->userid;
                         $row[] = $OUTPUT->user_picture($user, array('courseid' => $course->id));

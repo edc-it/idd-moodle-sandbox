@@ -45,14 +45,14 @@ $discussionvault = $vaultfactory->get_discussion_vault();
 $discussion = $discussionvault->get_from_id($d);
 
 if (!$discussion) {
-    throw new \moodle_exception('Unable to find discussion with id ' . $discussionid);
+    throw new \moodle_exception('errordiscussionnotfound', 'mod_forum');
 }
 
 $forumvault = $vaultfactory->get_forum_vault();
 $forum = $forumvault->get_from_id($discussion->get_forum_id());
 
 if (!$forum) {
-    throw new \moodle_exception('Unable to find forum with id ' . $discussion->get_forum_id());
+    throw new \moodle_exception('errorforumnotfound', 'mod_forum');
 }
 
 $course = $forum->get_course_record();
@@ -328,9 +328,6 @@ $rendererfactory = mod_forum\local\container::get_renderer_factory();
 $discussionrenderer = $rendererfactory->get_discussion_renderer($forum, $discussion, $displaymode);
 $orderpostsby = $displaymode == FORUM_MODE_FLATNEWEST ? 'created DESC' : 'created ASC';
 $replies = $postvault->get_replies_to_post($USER, $post, $capabilitymanager->can_view_any_private_reply($USER), $orderpostsby);
-$postids = array_map(function($post) {
-    return $post->get_id();
-}, array_merge([$post], array_values($replies)));
 
 if ($move == -1 and confirm_sesskey()) {
     $forumname = format_string($forum->get_name(), true);
@@ -341,5 +338,12 @@ echo $discussionrenderer->render($USER, $post, $replies);
 echo $OUTPUT->footer();
 
 if ($istracked && !$CFG->forum_usermarksread) {
-    forum_tp_mark_posts_read($USER, $postids);
+    if ($displaymode == FORUM_MODE_THREADED) {
+        forum_tp_add_read_record($USER->id, $post->get_id());
+    } else {
+        $postids = array_map(function($post) {
+            return $post->get_id();
+        }, array_merge([$post], array_values($replies)));
+        forum_tp_mark_posts_read($USER, $postids);
+    }
 }

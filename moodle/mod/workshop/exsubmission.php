@@ -156,10 +156,13 @@ if ($edit and $canmanage) {
         }
 
         // Save and relink embedded images and save attachments.
-        $formdata = file_postupdate_standard_editor($formdata, 'content', $workshop->submission_content_options(),
-            $workshop->context, 'mod_workshop', 'submission_content', $example->id);
-        $formdata = file_postupdate_standard_filemanager($formdata, 'attachment', $workshop->submission_attachment_options(),
-            $workshop->context, 'mod_workshop', 'submission_attachment', $example->id);
+        // To be used when Online text is allowed as a submission type.
+        if (!empty($formdata->content_editor)) {
+            $formdata = file_postupdate_standard_editor($formdata, 'content', $workshop->submission_content_options(),
+                $workshop->context, 'mod_workshop', 'submission_content', $example->id);
+            $formdata = file_postupdate_standard_filemanager($formdata, 'attachment', $workshop->submission_attachment_options(),
+                $workshop->context, 'mod_workshop', 'submission_attachment', $example->id);
+        }
 
         if (empty($formdata->attachment)) {
             // explicit cast to zero integer
@@ -180,7 +183,8 @@ echo $output->heading(format_string($workshop->name), 2);
 if (trim($workshop->instructauthors)) {
     $instructions = file_rewrite_pluginfile_urls($workshop->instructauthors, 'pluginfile.php', $PAGE->context->id,
         'mod_workshop', 'instructauthors', null, workshop::instruction_editors_options($PAGE->context));
-    print_collapsible_region_start('', 'workshop-viewlet-instructauthors', get_string('instructauthors', 'workshop'));
+    print_collapsible_region_start('', 'workshop-viewlet-instructauthors', get_string('instructauthors', 'workshop'),
+            'workshop-viewlet-instructauthors-collapsed');
     echo $output->box(format_text($instructions, $workshop->instructauthorsformat, array('overflowdiv'=>true)), array('generalbox', 'instructions'));
     print_collapsible_region_end();
 }

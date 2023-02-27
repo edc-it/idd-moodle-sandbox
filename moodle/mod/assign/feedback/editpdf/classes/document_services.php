@@ -576,7 +576,9 @@ EOD;
             }
         }
 
-        if (empty($pages)) {
+        $totalpagesforattempt = self::page_number_for_attempt($assignment, $userid, $attemptnumber, false);
+        // Here we are comparing the total number of images against the total number of pages from the combined PDF.
+        if (empty($pages) || count($pages) != $totalpagesforattempt) {
             if ($readonly) {
                 // This should never happen, there should be a version of the pages available
                 // whenever we are requesting the readonly version.
@@ -914,10 +916,13 @@ EOD;
         $oldfile = $fs->get_file($record->contextid, $record->component, $record->filearea,
             $record->itemid, $record->filepath, $record->filename);
 
-        $newhash = sha1($newfilepath);
-
-        // Delete old file if exists.
-        if ($oldfile && $newhash !== $oldfile->get_contenthash()) {
+        if ($oldfile) {
+            $newhash = \file_storage::hash_from_path($newfilepath);
+            if ($newhash === $oldfile->get_contenthash()) {
+                // Use existing file if contenthash match.
+                return $oldfile;
+            }
+            // Delete existing file.
             $oldfile->delete();
         }
 

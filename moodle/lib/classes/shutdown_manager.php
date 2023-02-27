@@ -33,7 +33,9 @@ defined('MOODLE_INTERNAL') || die();
  */
 class core_shutdown_manager {
     /** @var array list of custom callbacks */
-    protected static $callbacks = array();
+    protected static $callbacks = [];
+    /** @var array list of custom signal callbacks */
+    protected static $signalcallbacks = [];
     /** @var bool is this manager already registered? */
     protected static $registered = false;
 
@@ -66,7 +68,7 @@ class core_shutdown_manager {
      *
      * @param   int     $signo The signal being handled
      */
-    public static function signal_handler($signo) {
+    public static function signal_handler(int $signo) {
         // Note: There is no need to manually call the shutdown handler.
         // The fact that we are calling exit() in this script means that the standard shutdown handling is performed
         // anyway.
@@ -92,7 +94,38 @@ class core_shutdown_manager {
                 $exitcode = 1;
         }
 
-        exit ($exitcode);
+        // Normally we should exit unless a callback tells us to wait.
+        $shouldexit = true;
+        foreach (self::$signalcallbacks as $data) {
+            list($callback, $params) = $data;
+            try {
+                array_unshift($params, $signo);
+                $shouldexit = call_user_func_array($callback, $params) && $shouldexit;
+            } catch (Throwable $e) {
+                // phpcs:ignore
+                error_log('Exception ignored in signal function ' . get_callable_name($callback) . ': ' . $e->getMessage());
+            }
+        }
+
+        if ($shouldexit) {
+            exit ($exitcode);
+        }
+    }
+
+    /**
+     * Register custom signal handler function.
+     *
+     * If a handler returns false the signal will be ignored.
+     *
+     * @param callable $callback
+     * @param array $params
+     * @return void
+     */
+    public static function register_signal_handler($callback, array $params = null): void {
+        if (!is_callable($callback)) {
+            error_log('Invalid custom signal function detected ' . var_export($callback, true)); // phpcs:ignore
+        }
+        self::$signalcallbacks[] = [$callback, $params ?? []];
     }
 
     /**
@@ -100,9 +133,13 @@ class core_shutdown_manager {
      *
      * @param callable $callback
      * @param array $params
+     * @return void
      */
-    public static function register_function($callback, array $params = null) {
-        self::$callbacks[] = array($callback, $params);
+    public static function register_function($callback, array $params = null): void {
+        if (!is_callable($callback)) {
+            error_log('Invalid custom shutdown function detected '.var_export($callback, true)); // phpcs:ignore
+        }
+        self::$callbacks[] = [$callback, $params ? array_values($params) : []];
     }
 
     /**
@@ -115,19 +152,9 @@ class core_shutdown_manager {
         foreach (self::$callbacks as $data) {
             list($callback, $params) = $data;
             try {
-                if (!is_callable($callback)) {
-                    error_log('Invalid custom shutdown function detected '.var_export($callback, true));
-                    continue;
-                }
-                if ($params === null) {
-                    call_user_func($callback);
-                } else {
-                    call_user_func_array($callback, $params);
-                }
-            } catch (Exception $e) {
-                error_log('Exception ignored in shutdown function '.get_callable_name($callback).': '.$e->getMessage());
+                call_user_func_array($callback, $params);
             } catch (Throwable $e) {
-                // Engine errors in PHP7 throw exceptions of type Throwable (this "catch" will be ignored in PHP5).
+                // phpcs:ignore
                 error_log('Exception ignored in shutdown function '.get_callable_name($callback).': '.$e->getMessage());
             }
         }
@@ -177,15 +204,15 @@ class core_shutdown_manager {
         }
 
         // Deal with perf logging.
-        if (defined('MDL_PERF') || (!empty($CFG->perfdebug) and $CFG->perfdebug > 7)) {
+        if ((defined('MDL_PERF') && MDL_PERF) || (!empty($CFG->perfdebug) && $CFG->perfdebug > 7)) {
             if ($apachereleasemem) {
                 error_log('Mem usage over '.$apachereleasemem.': marking Apache child for reaping.');
             }
-            if (defined('MDL_PERFTOLOG')) {
+            if (defined('MDL_PERFTOLOG') && MDL_PERFTOLOG) {
                 $perf = get_performance_info();
                 error_log("PERF: " . $perf['txt']);
             }
-            if (defined('MDL_PERFINC')) {
+            if (defined('MDL_PERFINC') && MDL_PERFINC) {
                 $inc = get_included_files();
                 $ts  = 0;
                 foreach ($inc as $f) {

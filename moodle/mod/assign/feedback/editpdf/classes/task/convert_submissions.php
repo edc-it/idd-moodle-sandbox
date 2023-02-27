@@ -54,7 +54,12 @@ class convert_submissions extends scheduled_task {
 
         require_once($CFG->dirroot . '/mod/assign/locallib.php');
 
-        $records = $DB->get_records('assignfeedback_editpdf_queue');
+        // Conversion speed varies significantly and mostly depends on the documents content.
+        // We don't want the task to get stuck forever trying to process the whole queue in one go,
+        // so fetch 100 records only to make sure the task will be working for reasonable time.
+        // With the task's default schedule, 100 records per run means the task is capable to process
+        // 9600 conversions per day (100 * 4 * 24).
+        $records = $DB->get_records('assignfeedback_editpdf_queue', [], '', '*', 0, 100);
 
         $assignmentcache = array();
 
@@ -98,6 +103,7 @@ class convert_submissions extends scheduled_task {
             }
 
             mtrace('Convert ' . count($users) . ' submission attempt(s) for assignment ' . $assignmentid);
+            $conversionrequirespolling = false;
 
             foreach ($users as $userid) {
                 try {
@@ -107,6 +113,7 @@ class convert_submissions extends scheduled_task {
                         case combined_document::STATUS_READY_PARTIAL:
                         case combined_document::STATUS_PENDING_INPUT:
                             // The document has not been converted yet or is somehow still ready.
+                            $conversionrequirespolling = true;
                             continue 2;
                     }
                     document_services::get_page_images_for_attempt(
@@ -127,7 +134,9 @@ class convert_submissions extends scheduled_task {
             }
 
             // Remove from queue.
-            $DB->delete_records('assignfeedback_editpdf_queue', array('id' => $record->id));
+            if (!$conversionrequirespolling) {
+                $DB->delete_records('assignfeedback_editpdf_queue', array('id' => $record->id));
+            }
 
         }
     }
